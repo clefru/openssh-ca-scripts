@@ -1,0 +1,31 @@
+#!/bin/sh
+# Replaces a CA-signed pubkey in the SSH agent with freshly generated
+# and freshly signed key with a fresh validity.
+
+TMPDIR=""
+KEYNAME="$(hostname -s)-key"
+VALIDITY="+1d"
+CAKEY=$HOME/.ssh/user-ca-key
+
+source $(dirname $0)/common
+
+TMPFILES="$TMPDIR/$KEYNAME $TMPDIR/$KEYNAME.pub $TMPDIR/$KEYNAME-cert.pub $TMPDIR/oldkey.pub $TMPDIR/fd1 $TMPDIR/fd2"
+TMPDIR=$(mktemp -d /dev/shm/ssh-key.XXXXX)
+
+# Search agent keys for one with $KEYNAME and remove it.
+ssh-add -L | awk '$3 ~ /'$KEYNAME'/ { print $0 }' |
+    (while read key; do
+         # Extract the pubkey from the ssh-agent as deletion via
+         # "ssh-add -d" can't go by name reference alone.
+	 echo $key > $TMPDIR/oldkey.pub
+	 ssh-add -d $TMPDIR/oldkey.pub 2> /dev/null
+     done)
+
+umask 077
+# Generate new key
+ss_lf ssh-keygen -N "" -f $TMPDIR/$KEYNAME
+# Sign key
+ss_lf ssh-keygen -s $CAKEY -I $(basename $TMPDIR) -V $VALIDITY $TMPDIR/$KEYNAME.pub
+# Add key to agent
+ss_lf ssh-add $TMPDIR/$KEYNAME
+

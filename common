@@ -1,0 +1,29 @@
+TMPDIR=""
+
+# Silent success or loud fail
+function ss_lf() {
+    if ! "$@" > $TMPDIR/fd1 2> $TMPDIR/fd2; then
+        echo Failed to run cmd: "$@"
+        RC=$?
+        # This doesn't perserve the order in which it was originally
+        # printed, but oh well..
+        cat $TMPDIR/fd1
+        cat $TMPDIR/fd2 >&2
+        exit $?
+     fi
+}
+
+# Clean up trap for $TMPDIR.
+function cleanup() {
+    if [ -z "$TMPDIR" ]; then
+       return
+    fi
+    # We don't care about any errors here.
+    exec 2> /dev/null
+
+    for i in $TMPFILES; do
+        rm $i
+    done
+    rmdir $TMPDIR
+}
+trap cleanup EXIT

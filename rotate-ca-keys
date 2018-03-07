@@ -1,0 +1,35 @@
+#!/bin/sh
+# Invalidates all existing signed pub keys by rotating the certificate
+# authority.
+
+CAKEY=$HOME/.ssh/user-ca-key
+AUTH_KEYS=$HOME/.ssh/authorized_keys
+TMPDIR=""
+TMPFILES="$TMPDIR/ca $TMPDIR/ca.pub $TMPDIR/authorized_keys $TMPDIR/fd1 $TMPDIR/fd2"
+
+source $(dirname $0)/common
+
+TMPDIR=$(mktemp -d /dev/shm/new-ca.XXXXX)
+
+function cert_line() {
+    echo -n "cert-authority "
+    cat $1
+}
+
+
+umask 077
+ssh-keygen -f $TMPDIR/ca -N "" > /dev/null 2> /dev/null
+
+# Replace the existing cert-authority in authorize_keys with the new
+# one.
+
+ORIGINAL=$(cert_line $CAKEY.pub)
+REPLACE=$(cert_line $TMPDIR/ca.pub)
+cat $AUTH_KEYS | awk '
+  { if ($0 == "'"$ORIGINAL"'") { print "'"$REPLACE"'"; PRINTED=1 } else { print $0 } }
+  END { if (PRINTED != 1) { print "'"$REPLACE"'" } }
+' > $TMPDIR/authorized_keys
+
+cat $TMPDIR/authorized_keys > $AUTH_KEYS
+cat $TMPDIR/ca > $CAKEY
+cat $TMPDIR/ca.pub > $CAKEY.pub
